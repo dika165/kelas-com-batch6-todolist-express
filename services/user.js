@@ -1,5 +1,10 @@
 import * as UserRepo from '../repository/users.js';
 import { successResponse, errorResponse } from '../utils/response.js';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+
+const SECRET_AT = "kelas.com";
+const SECRET_RT = "andika-wiyatno";
 
 export const getAllUser = async (request, response, next) => {
     try {
@@ -15,8 +20,13 @@ export const createUser = async (request, response, next) => {
         let name = request.body.name;
         let email = request.body.email;
         let password = request.body.password;
-        const [result] = await UserRepo.createData(name, email, password);
-        successResponse(response, "berhasil menambahkan data", result.insertId)
+        const saltRound = 10;
+        let hasedPassword = "";
+        bcrypt.hash(password, saltRound, async (err, hash) => {
+            const [result] = await UserRepo.createData(name, email, hash);
+            successResponse(response, "berhasil menambahkan data", result.insertId);
+        });
+        
     } catch(error) {
         next(error);
     }
@@ -34,5 +44,41 @@ export const getUserById = async(request, response, next) => {
         }
     } catch(error) {
         next(error)
+    }
+}
+
+export const authUser = async (request, response, next) => {
+    try {
+        let email = request.body.email;
+        let pass = request.body.password;
+        const [result] = await UserRepo.getDataByEmail(email);
+        const user = result[0];
+        console.log(user);
+
+        if (result.length > 0) {
+            bcrypt.compare(pass, user.password, (err, result)=> {
+                console.log(user.password);
+                if (result) {
+                    let claims = {
+                        id: user.user_id,
+                        email: user.email,
+                    }
+                    const accessToken = jwt.sign(claims, SECRET_AT, {expiresIn:'15m'});
+                    const refreshToken = jwt.sign(claims, SECRET_RT, {expiresIn:'30m'});
+                    let respData = {
+                        access_token: accessToken,
+                        refresh_token: refreshToken
+                    }
+                    successResponse(response, "Ok", respData);
+                } else {
+                    errorResponse(response, "email atau password salah!",400);
+                }
+            } );
+        } else {
+            errorResponse(response, "email atau password salah!",400);
+        }
+
+    } catch(error) {
+        next(error);
     }
 }
